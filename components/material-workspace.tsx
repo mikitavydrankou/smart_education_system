@@ -42,7 +42,13 @@ export function MaterialWorkspace() {
     setBusy(true); setError('')
     try {
       const response = await fetch('/api/material', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: source.text, profile }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(185_000)]) })
-      const body = await response.json()
+      const raw = await response.text()
+      let body: { error?: unknown; course?: unknown } = {}
+      try { body = raw ? JSON.parse(raw) : {} } catch {
+        throw new Error(response.status === 504 || response.status === 502 || response.status === 408
+          ? 'Przekroczono czas oczekiwania serwera. Spróbuj ponownie lub skróć materiał.'
+          : 'Serwer zwrócił nieoczekiwaną odpowiedź. Spróbuj ponownie za chwilę.')
+      }
       if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Nie udało się przygotować lekcji.')
       const course = validateCourse(body.course, source, true)
       if (!course) throw new Error('Odpowiedź AI nie przeszła weryfikacji. Spróbuj ponownie.')

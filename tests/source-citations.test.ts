@@ -33,3 +33,29 @@ test('diagram citations resolve by source ID instead of confusing concept and ev
  raw.concepts[2].media.diagram.nodes[0].citationId='not-a-citation'
  assert.equal(resolveCitations(raw,source),null)
 })
+
+test('extra diagram citations reuse the concept evidence cap instead of rejecting the lesson',()=>{
+ const source=normalizeSource(`${sourceText}\n\n${'Dodatkowy opis procesu metabolicznego w komórkach roślinnych. '.repeat(40)}`)!
+ const citations=sourceCitations(source)
+ assert.ok(citations.length>=4)
+ const course=structuredClone(richCourseFixture)
+ const c0=course.concepts[0]
+ const base=citations.slice(0,3)
+ const extra=citations[3]!
+ const raw={
+  ...course,
+  concepts:[{
+   ...c0,
+   evidence:base.map(x=>({citationId:x.id})),
+   media:{...c0.media,diagram:{
+    ...c0.media.diagram,
+    nodes:c0.media.diagram.nodes.map(n=>{const {evidenceIndex,...rest}=n;void evidenceIndex;return {...rest,citationId:extra.id}}),
+    edges:c0.media.diagram.edges.map(e=>{const {evidenceIndex,...rest}=e;void evidenceIndex;return {...rest,citationId:extra.id}}),
+   }},
+  },...course.concepts.slice(1)],
+ }
+ const resolved=resolveCitations(raw,source) as typeof course
+ assert.ok(resolved)
+ assert.equal(resolved.concepts[0].evidence.length,3)
+ assert.ok(resolved.concepts[0].media.diagram.nodes.every(n=>n.evidenceIndex>=0&&n.evidenceIndex<3))
+})
