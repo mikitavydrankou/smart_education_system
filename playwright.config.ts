@@ -7,6 +7,13 @@ export default defineConfig({
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['Pixel 7'] } },
+    { name: 'iphone-chromium', use: { ...devices['iPhone 13'], browserName: 'chromium' } },
+    { name: 'ipad-chromium', use: { ...devices['iPad Pro 11'], browserName: 'chromium' } },
   ],
-  webServer: { command: 'pnpm start --hostname 127.0.0.1 --port 3100', url: 'http://127.0.0.1:3100', reuseExistingServer: !process.env.CI },
+  webServer: {
+    command: 'npm run start -- --hostname 127.0.0.1 --port 3100',
+    url: 'http://127.0.0.1:3100',
+    reuseExistingServer: false,
+    env: { OPENAI_API_KEY: '', OPENROUTER_API_KEY: '' },
+  },
 })

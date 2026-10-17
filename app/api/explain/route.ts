@@ -5,7 +5,11 @@ export const runtime = 'nodejs'
 const cache = new Map<string, { expires: number; result: ReturnType<typeof explainMistake> }>()
 export async function POST(request: Request) {
   const headers = { 'Cache-Control': 'no-store' }
-  if (request.headers.get('origin') && request.headers.get('origin') !== new URL(request.url).origin) return Response.json({ error: 'Niedozwolone źródło żądania.' }, { status: 403, headers })
+  const url = new URL(request.url)
+  // Next may use an internal hostname in request.url. The browser's Host is
+  // authoritative for this request; do not accept arbitrary forwarded hosts.
+  const origin = `${url.protocol}//${request.headers.get('host') || url.host}`
+  if (request.headers.get('origin') && request.headers.get('origin') !== origin) return Response.json({ error: 'Niedozwolone źródło żądania.' }, { status: 403, headers })
   try {
     if (Number(request.headers.get('content-length')) > 1024) return Response.json({ error: 'Żądanie jest zbyt duże.' }, { status: 413, headers })
     const raw = await request.text()

@@ -3,14 +3,16 @@ import { resolveMistake } from './explanation.ts'
 type Mistake = NonNullable<ReturnType<typeof resolveMistake>>
 export async function explainMistake(mistake: Mistake): Promise<{ text: string; source: 'ai' | 'fallback' }> {
   const fallback = { text: mistake.fallback, source: 'fallback' as const }
-  if (!process.env.OPENAI_API_KEY) return fallback
+  const router = !!process.env.OPENROUTER_API_KEY
+  const apiKey = router ? process.env.OPENROUTER_API_KEY : process.env.OPENAI_API_KEY
+  if (!apiKey) return fallback
   try {
     const { fallback: verifiedAlternative, ...context } = mistake
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetch(router ? 'https://openrouter.ai/api/v1/responses' : 'https://api.openai.com/v1/responses', {
       method: 'POST', signal: AbortSignal.timeout(10_000),
-      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || 'gpt-4.1-mini', store: false, max_output_tokens: 350,
+        model: router ? process.env.OPENROUTER_MODEL || 'openai/gpt-4.1-mini' : process.env.OPENAI_MODEL || 'gpt-4.1-mini', store: false, max_output_tokens: 350,
         instructions: 'Wyjaśniasz pojedynczy błąd w lekcji o internecie. Odpowiedz wyłącznie po polsku, w 2–4 krótkich zdaniach, bez formatowania. Wyjaśnij, dlaczego wybrana odpowiedź jest błędna, i odnieś ją do poprawnej. Korzystaj wyłącznie ze zweryfikowanego wyjaśnienia i alternatywy. Nie zmieniaj poprawnej odpowiedzi. Nie oceniaj ucznia, nie steruj nawigacją, nie prowadź rozmowy. Styl simple oznacza proste słowa, example konkretny przykład, steps kroki.',
         input: JSON.stringify({ ...context, verifiedAlternative }),
       }),

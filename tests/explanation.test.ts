@@ -25,11 +25,48 @@ test('AI input accepts only a real incorrect answer with a supported style', () 
 })
 test('missing API key uses accurate fallback and is never labeled AI', async () => {
   const oldKey = process.env.OPENAI_API_KEY
+  const oldRouterKey = process.env.OPENROUTER_API_KEY
   delete process.env.OPENAI_API_KEY
+  delete process.env.OPENROUTER_API_KEY
   try {
     const mistake = resolveMistake({ questionId: 'p-dns', retry: false, selected: 0, style: 'simple' })!
     assert.deepEqual(await explainMistake(mistake), { text: mistake.fallback, source: 'fallback' })
-  } finally { if (oldKey !== undefined) process.env.OPENAI_API_KEY = oldKey }
+  } finally {
+    if (oldKey !== undefined) process.env.OPENAI_API_KEY = oldKey
+    if (oldRouterKey !== undefined) process.env.OPENROUTER_API_KEY = oldRouterKey
+  }
+})
+
+test('OpenRouter key uses its Responses endpoint and namespaced model', async () => {
+  const oldRouterKey = process.env.OPENROUTER_API_KEY
+  const oldRouterModel = process.env.OPENROUTER_MODEL
+  const originalFetch = globalThis.fetch
+  process.env.OPENROUTER_API_KEY = 'test-router-placeholder'
+  delete process.env.OPENROUTER_MODEL
+  const mistake = resolveMistake({ questionId: 'p-dns', retry: false, selected: 0, style: 'simple' })!
+  try {
+    globalThis.fetch = async (url, options) => {
+      assert.equal(url, 'https://openrouter.ai/api/v1/responses')
+      assert.equal((options!.headers as Record<string, string>).Authorization, 'Bearer test-router-placeholder')
+      const body = JSON.parse(options!.body as string)
+      assert.equal(body.model, 'openai/gpt-4.1-mini')
+      assert.equal(body.store, false)
+      return Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: 'DNS ustala adres IP, a serwer udostępnia pliki strony.' }] }] })
+    }
+    assert.equal((await explainMistake(mistake)).source, 'ai')
+    process.env.OPENROUTER_MODEL = 'openai/gpt-4.1'
+    globalThis.fetch = async (_url, options) => {
+      assert.equal(JSON.parse(options!.body as string).model, 'openai/gpt-4.1')
+      return new Response(null, { status: 503 })
+    }
+    assert.deepEqual(await explainMistake(mistake), { text: mistake.fallback, source: 'fallback' })
+  } finally {
+    globalThis.fetch = originalFetch
+    if (oldRouterKey === undefined) delete process.env.OPENROUTER_API_KEY
+    else process.env.OPENROUTER_API_KEY = oldRouterKey
+    if (oldRouterModel === undefined) delete process.env.OPENROUTER_MODEL
+    else process.env.OPENROUTER_MODEL = oldRouterModel
+  }
 })
 test('provider failure safely falls back; successful Responses text is extracted', async () => {
   const oldKey = process.env.OPENAI_API_KEY

@@ -31,6 +31,10 @@ test('complete adaptive journey, retry restoration, fallback and restart', async
     const wrong = i === 0 || i === 1
     await expect(page.getByRole('heading', { name: q.prompt, exact: true })).toBeVisible()
     await page.getByRole('radio').nth(wrong ? (q.answer + 1) % q.options.length : q.answer).check()
+    if (i === 0) {
+      await page.reload()
+      await expect(page.getByRole('radio').nth((q.answer + 1) % q.options.length)).toBeChecked()
+    }
     await page.getByRole('button', { name: 'Sprawdź odpowiedź' }).click()
     await expect(page.getByRole('radio').first()).toBeDisabled()
     if (wrong) {
@@ -95,5 +99,44 @@ test('malformed storage, invalid API input, unsupported routes', async ({ page, 
   expect(response.status()).toBe(400)
   const fallback = await request.post('/api/explain', { data: { questionId: 'p-dns', retry: false, selected: 0, style: 'simple' } })
   expect((await fallback.json()).source).toBe('fallback')
+  const browserResponse = await page.evaluate(async () => {
+    const result = await fetch('/api/explain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ questionId: 'p-dns', retry: false, selected: 0, style: 'simple' }) })
+    return { status: result.status, body: await result.json() }
+  })
+  expect(browserResponse.status).toBe(200)
+  expect(browserResponse.body.source).toBe('fallback')
+  const crossOrigin = await request.post('/api/explain', { headers: { origin: 'https://other.example' }, data: { questionId: 'p-dns', retry: false, selected: 0, style: 'simple' } })
+  expect(crossOrigin.status()).toBe(403)
+  const oversized = await request.post('/api/explain', { data: 'x'.repeat(1025) })
+  expect(oversized.status()).toBe(413)
   expect((await page.goto('/missing'))!.status()).toBe(404)
+})
+
+test('keyboard answers and focus follow the next assessment question', async ({ page }) => {
+  await page.goto('/lesson')
+  await expect(page.getByRole('button', { name: 'Kontynuuj', exact: true })).toBeDisabled()
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('radio').first()).toBeFocused()
+  await page.keyboard.press('Space')
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('button', { name: 'Kontynuuj', exact: true })).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByText('Pytanie 2 z 3')).toBeVisible()
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('radio').first()).toBeFocused()
+})
+
+test('failed explanation request uses local verified fallback in every style', async ({ page }) => {
+  await page.route('**/api/explain', route => route.abort())
+  await page.goto('/lesson')
+  await assess(page)
+  await page.getByRole('button', { name: 'Przejdź do ćwiczeń' }).click()
+  await page.getByRole('radio').nth(0).check()
+  await page.getByRole('button', { name: 'Sprawdź odpowiedź' }).click()
+  for (const style of ['simple', 'example', 'steps']) {
+    await page.getByRole('combobox').selectOption(style)
+    await page.getByRole('button', { name: 'Wyjaśnij mój błąd' }).click()
+    await expect(page.getByText('Wyjaśnienie z materiałów lekcji')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Wyjaśnij mój błąd' })).toBeDisabled()
+  }
 })

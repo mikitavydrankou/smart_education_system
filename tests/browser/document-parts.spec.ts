@@ -1,0 +1,32 @@
+import {test,expect} from '@playwright/test'
+import {sourceText,richCourseFixture} from '../material-fixture'
+
+test('long document stays intact across refresh and continues to the next part',async({page})=>{
+ const text=Array.from({length:100},()=>sourceText).join('\n\n')
+ await page.route('**/api/material',route=>{
+  const input=route.request().postDataJSON()
+  expect(input.text.length).toBeLessThanOrEqual(20000)
+  return route.fulfill({json:{course:richCourseFixture}})
+ })
+ await page.goto('/workspace')
+ await page.getByLabel('Wybierz plik').setInputFiles({name:'long-paper.txt',mimeType:'text/plain',buffer:Buffer.from(text)})
+ await expect(page.getByLabel('Materiał źródłowy',{exact:true})).toHaveValue(text)
+ await expect(page.getByRole('region',{name:'Części dokumentu'})).toBeVisible()
+ await page.getByLabel('Część do nauki',{exact:true}).selectOption('1')
+ await page.reload()
+ await expect(page.getByLabel('Część do nauki',{exact:true})).toHaveValue('1')
+ await expect(page.getByLabel('Materiał źródłowy',{exact:true})).toHaveValue(text)
+ await page.getByLabel('Część do nauki',{exact:true}).selectOption('0')
+ await page.getByRole('button',{name:'Przygotuj moją lekcję'}).click()
+ await page.getByRole('checkbox',{name:/Chlorofil/}).uncheck()
+ await page.getByRole('checkbox',{name:/Substraty/}).uncheck()
+ await page.getByRole('button',{name:'Zacznij naukę'}).click()
+ await page.getByRole('button',{name:'Sprawdź zrozumienie'}).click()
+ await page.getByRole('radio').first().check()
+ await page.getByRole('button',{name:'Sprawdź odpowiedź'}).click()
+ await page.getByRole('button',{name:'Zobacz podsumowanie'}).click()
+ await page.getByRole('button',{name:'Przejdź do kolejnej części'}).click()
+ await expect(page.getByLabel('Część do nauki',{exact:true})).toHaveValue('1')
+ await expect(page.getByLabel('Materiał źródłowy',{exact:true})).toHaveValue(text)
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+})

@@ -3,9 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'ADAPT — Jak działa internet?',
-  description: 'Interaktywna lekcja o DNS, adresach IP i serwerach, dopasowana do Twojej wiedzy.',
-  generator: 'v0.app',
+  title: 'ADAPT — Wiedza po Twojemu',
+  description: 'Czytaj, zobacz i posłuchaj. Odkrywaj wiedzę w swoim tempie dzięki dopasowanym wyjaśnieniom i interaktywnym ćwiczeniom.',
   icons: {
     icon: [
       {
@@ -26,10 +25,11 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light',
+  colorScheme: 'light dark',
+  viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: 'black' },
+    { media: '(prefers-color-scheme: light)', color: '#f5f5f7' },
+    { media: '(prefers-color-scheme: dark)', color: '#111113' },
   ],
 }
 
@@ -39,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="pl" className="light">
+    <html lang="pl">
       <body className="antialiased">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
