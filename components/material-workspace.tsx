@@ -11,7 +11,7 @@ import { ActionExercise } from './action-exercise'
 import { AudioLesson } from './audio-lesson'
 import { LearnerProfile } from './learner-profile'
 import { conceptMedia } from '@/lib/learning-media'
-import { createAdaptiveLearning, reduceAdaptiveLearning, restoreAdaptiveWorkspace, type AdaptiveWorkspace as Workspace, type AdaptiveAction as LearningAction } from '@/lib/adaptive'
+import { createAdaptiveLearning, reduceAdaptiveLearning, restoreAdaptiveWorkspace, type AdaptiveWorkspace as Workspace, type AdaptiveAction } from '@/lib/adaptive'
 import { splitDocument, MAX_DOCUMENT_CHARS } from '@/lib/document-parts'
 import { importMaterial } from '@/lib/import-material'
 import { normalizeSource, validateCourse, learningResults, type Format, type MaterialConcept } from '@/lib/material'
@@ -29,37 +29,67 @@ export function MaterialWorkspace() {
   const parts = useMemo(() => splitDocument(draft), [draft])
   const partIndex = Math.min(part, Math.max(0, parts.length - 1))
   const [busy, setBusy] = useState(false), [importing, setImporting] = useState(false), [error, setError] = useState('')
-  const request = useRef<AbortController | null>(null), focus = useRef<HTMLDivElement>(null)
+  const [mediaStatus, setMediaStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
+  const request = useRef<AbortController | null>(null), mediaRequest = useRef<AbortController | null>(null), enriching = useRef(false), mediaFailed = useRef(false)
+  const focus = useRef<HTMLDivElement>(null)
   const identity = `${workspace?.learning.stage}-${workspace?.learning.index}-${workspace?.learning.phase}`
-  useEffect(() => () => request.current?.abort(), [])
+  useEffect(() => () => { request.current?.abort(); mediaRequest.current?.abort() }, [])
   useEffect(() => { if (ready) focus.current?.focus() }, [identity, ready])
-  const update = (action: LearningAction) => setWorkspace(v => v ? { ...v, learning: reduceAdaptiveLearning(v.learning, action, v.course) } : v)
+  const parseJson = async (response: Response) => {
+    const raw = await response.text()
+    try { return raw ? JSON.parse(raw) as { error?: unknown; course?: unknown } : {} } catch {
+      throw new Error(response.status === 504 || response.status === 502 || response.status === 408
+        ? 'Przekroczono czas oczekiwania serwera. Spróbuj ponownie lub skróć materiał.'
+        : 'Serwer zwrócił nieoczekiwaną odpowiedź. Spróbuj ponownie za chwilę.')
+    }
+  }
+  useEffect(() => {
+    if (!workspace || workspace.learning.stage !== 'study' || workspace.learning.format === 'text') return
+    if (workspace.course.mediaVersion === 2 || enriching.current || mediaFailed.current) return
+    const current = workspace
+    enriching.current = true
+    setMediaStatus('loading')
+    const controller = new AbortController(); mediaRequest.current = controller
+    void (async () => {
+      try {
+        const response = await fetch('/api/material/media', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: current.source.text, course: current.course }),
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]),
+        })
+        const body = await parseJson(response)
+        if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Nie udało się uzupełnić schematów.')
+        const course = validateCourse(body.course, current.source, true)
+        if (!course) throw new Error('Nie udało się uzupełnić schematów.')
+        setWorkspace(v => v && v.source.text === current.source.text ? { ...v, course } : v)
+        setMediaStatus('ready')
+      } catch {
+        if (!controller.signal.aborted) { mediaFailed.current = true; setMediaStatus('failed') }
+      } finally { enriching.current = false; mediaRequest.current = null }
+    })()
+  }, [workspace, setWorkspace])
+  const update = (action: AdaptiveAction) => setWorkspace(v => v ? { ...v, learning: reduceAdaptiveLearning(v.learning, action, v.course) } : v)
   const generate = async () => {
     if (request.current || importing) return
     const source = normalizeSource(parts[partIndex]?.text)
     if (!source) { setError('Dodaj od 120 do 250 000 znaków materiału i wybierz część do nauki.'); return }
     const controller = new AbortController(); request.current = controller
-    setBusy(true); setError('')
+    setBusy(true); setError(''); setMediaStatus('idle'); mediaFailed.current = false
     try {
-      const response = await fetch('/api/material', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: source.text, profile }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(185_000)]) })
-      const raw = await response.text()
-      let body: { error?: unknown; course?: unknown } = {}
-      try { body = raw ? JSON.parse(raw) : {} } catch {
-        throw new Error(response.status === 504 || response.status === 502 || response.status === 408
-          ? 'Przekroczono czas oczekiwania serwera. Spróbuj ponownie lub skróć materiał.'
-          : 'Serwer zwrócił nieoczekiwaną odpowiedź. Spróbuj ponownie za chwilę.')
-      }
+      const response = await fetch('/api/material', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: source.text, profile }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]) })
+      const body = await parseJson(response)
       if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Nie udało się przygotować lekcji.')
-      const course = validateCourse(body.course, source, true)
+      const course = validateCourse(body.course, source, false)
       if (!course) throw new Error('Odpowiedź AI nie przeszła weryfikacji. Spróbuj ponownie.')
-      setWorkspace({ version: 2, source, name: `${(name.trim() || 'Mój materiał').slice(0, 95)}${parts.length > 1 ? ` · część ${partIndex + 1}/${parts.length}` : ''}`, profile, course, learning: createAdaptiveLearning(course, profile, learnerRecords) })
+      const next: Workspace = { version: 2, source, name: `${(name.trim() || 'Mój materiał').slice(0, 95)}${parts.length > 1 ? ` · część ${partIndex + 1}/${parts.length}` : ''}`, profile, course, learning: createAdaptiveLearning(course, profile, learnerRecords) }
+      setWorkspace(next)
     } catch (e) {
       setError(controller.signal.aborted ? 'Generowanie anulowane. Materiał pozostał w formularzu.' : e instanceof Error && e.name !== 'TimeoutError' ? e.message : 'Przekroczono czas oczekiwania. Spróbuj ponownie.')
     } finally { request.current = null; setBusy(false) }
   }
   const reset = () => {
     if (workspace && !window.confirm('Zamknąć bieżącą lekcję i dodać nowy materiał? Zapisane lekcje zostaną w bibliotece.')) return
-    setWorkspace(null); setPart(0); setDraft(''); setName('Mój materiał'); setError('')
+    mediaRequest.current?.abort(); mediaFailed.current = false; setWorkspace(null); setPart(0); setDraft(''); setName('Mój materiał'); setError(''); setMediaStatus('idle')
   }
   return <Shell><main className="workspace-main">
     {!ready ? <p role="status">Wczytuję Twoje materiały…</p> : <>
@@ -99,7 +129,7 @@ export function MaterialWorkspace() {
               </fieldset>
               <p className="privacy-note">Plik odczytujemy na urządzeniu. Po kliknięciu poniżej tekst i ustawienia trafią do usługi AI. Materiał i postępy zapisujemy lokalnie w tej przeglądarce.</p>
               <button type="button" className="action-button action-primary" disabled={busy || importing || draft.trim().length < 120} onClick={generate}>{busy ? <><LoaderCircle className="loading-icon" aria-hidden="true" /> Przygotowuję lekcję…</> : <>Przygotuj moją lekcję <ArrowRight aria-hidden="true" /></>}</button>
-              {busy && <div role="status" className="generation-status"><p>Porządkujemy pojęcia, dobieramy wyjaśnienia i sprawdzamy cytaty. Jeśli kontrola jakości wykryje błąd, automatycznie ponowimy próbę. Może to potrwać do trzech minut.</p><button type="button" onClick={() => request.current?.abort()}>Anuluj generowanie</button></div>}
+              {busy && <div role="status" className="generation-status"><p>Porządkujemy pojęcia i sprawdzamy cytaty. Schematy i nagrania uzupełnimy dopiero, gdy wybierzesz Schemat, Audio lub Praktykę.</p><button type="button" onClick={() => request.current?.abort()}>Anuluj generowanie</button></div>}
             </section>
           </div>
           {error && <p role="alert" className="notice error-notice">{error}</p>}
@@ -110,7 +140,7 @@ export function MaterialWorkspace() {
             <div className="outline-topics">{workspace.course.concepts.map((c, i) => <label key={c.id}><input type="checkbox" checked={workspace.learning.ids.includes(c.id)} onChange={e => update({ type: 'topics', ids: e.target.checked ? [...workspace.learning.ids, c.id] : workspace.learning.ids.filter(id => id !== c.id) })} /><span className="topic-number">{String(i + 1).padStart(2, '0')}</span><span><strong>{c.title}</strong><small>{c.simple}</small></span></label>)}</div>
             <div className="workspace-actions"><span>{workspace.learning.ids.length} z {workspace.course.concepts.length} tematów</span><button type="button" className="action-button action-primary" disabled={!workspace.learning.ids.length} onClick={() => update({ type: 'start', ids: workspace.learning.ids })}>Zacznij naukę <ArrowRight aria-hidden="true" /></button></div>
           </section>
-        </> : workspace.learning.stage === 'results' ? <><WorkspaceResults workspace={workspace} onRestart={() => setWorkspace({ ...workspace, learning: createAdaptiveLearning(workspace.course, workspace.profile, learnerRecords) })} onNew={reset} />{parts.length > 1 && partIndex + 1 < parts.length && <div className="workspace-actions"><p>Ukończono część {partIndex + 1} z {parts.length}. Pozostały materiał jest zachowany.</p><button type="button" className="action-button action-primary" onClick={() => { setPart(partIndex + 1); setWorkspace(null); setError('') }}>Przejdź do kolejnej części <ArrowRight aria-hidden="true" /></button></div>}</> : <WorkspaceStudy workspace={workspace} update={update} />}
+        </> : workspace.learning.stage === 'results' ? <><WorkspaceResults workspace={workspace} onRestart={() => setWorkspace({ ...workspace, learning: createAdaptiveLearning(workspace.course, workspace.profile, learnerRecords) })} onNew={reset} />{parts.length > 1 && partIndex + 1 < parts.length && <div className="workspace-actions"><p>Ukończono część {partIndex + 1} z {parts.length}. Pozostały materiał jest zachowany.</p><button type="button" className="action-button action-primary" onClick={() => { setPart(partIndex + 1); setWorkspace(null); setError(''); setMediaStatus('idle') }}>Przejdź do kolejnej części <ArrowRight aria-hidden="true" /></button></div>}</> : <WorkspaceStudy workspace={workspace} update={update} mediaStatus={mediaStatus} />}
       </div>
     </>}
   </main></Shell>
@@ -119,7 +149,7 @@ export function MaterialWorkspace() {
 function SourceEvidence({ concept, workspace }: { concept: MaterialConcept; workspace: Workspace }) {
   return <details className="source-evidence"><summary>Zobacz fragment źródła</summary>{concept.evidence.map((e, i) => <div key={`${e.blockId}-${i}`}><span>Fragment {e.blockId.slice(1)} · {workspace.name}</span><blockquote>{e.quote}</blockquote><details><summary>Cały akapit</summary><p>{workspace.source.blocks.find(b => b.id === e.blockId)?.text}</p></details></div>)}</details>
 }
-function WorkspaceStudy({ workspace: w, update }: { workspace: Workspace; update: (a: LearningAction) => void }) {
+function WorkspaceStudy({ workspace: w, update, mediaStatus }: { workspace: Workspace; update: (a: AdaptiveAction) => void; mediaStatus: 'idle' | 'loading' | 'ready' | 'failed' }) {
   const s = w.learning, c = w.course.concepts.find(c => c.id === s.ids[s.index])!
   const [detail, setDetail] = useState<'explanation' | 'simple' | 'example'>('explanation')
   const [help, setHelp] = useState<'example' | 'steps'>('example')
@@ -136,7 +166,9 @@ function WorkspaceStudy({ workspace: w, update }: { workspace: Workspace; update
         {s.format === 'visual' && <ConceptDiagram key={c.id} diagram={media.diagram} evidence={c.evidence} />}
         {s.format === 'audio' && <AudioLesson key={c.id} text={media.narration} onPlay={() => update({ type: 'audio-played' })} />}
         {s.format === 'practice' && <ActionExercise learning={s} course={w.course} update={update} />}
-        {!c.media && <p className="muted-copy">Ten kurs pochodzi z wcześniejszej wersji. Schemat i ćwiczenie odtworzono z istniejących cytatów; postępy zostały zachowane. Nowe kursy otrzymują osobne multimedia dla każdego tematu.</p>}
+        {mediaStatus === 'loading' && <p className="field-help" role="status">Uzupełniam schematy i nagrania…</p>}
+        {mediaStatus === 'failed' && <p className="muted-copy" role="status">Lekcja tekstowa jest gotowa. Nie udało się dodać schematów — możesz uczyć się dalej.</p>}
+        {!c.media && mediaStatus === 'idle' && <p className="muted-copy">Schemat i ćwiczenie korzystają na razie z cytatów. Wybierz Schemat, Audio lub Praktykę, aby uzupełnić multimedia.</p>}
         <SourceEvidence concept={c} workspace={w} />
         {s.phase === 'question' && !s.quizOpen && <button type="button" className="action-button action-primary" onClick={() => update({ type: 'practice' })}>Sprawdź zrozumienie <ArrowRight aria-hidden="true" /></button>}
       </section>

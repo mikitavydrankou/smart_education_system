@@ -45,11 +45,15 @@ async function digest(value:string){
  let a=2166136261,b=5381;for(let i=0;i<value.length;i++){a=Math.imul(a^value.charCodeAt(i),16777619);b=Math.imul(b,33)^value.charCodeAt(i)}
  return `${(a>>>0).toString(16)}-${(b>>>0).toString(16)}-${value.length}`
 }
+/** Stable across media enrich so the same lesson overwrites one library row. */
+export function lessonIdentity(workspace:AdaptiveWorkspace){
+ return JSON.stringify({source:workspace.source.text,title:workspace.course.title,concepts:workspace.course.concepts.map(c=>c.id)})
+}
 let writes:Promise<unknown>=Promise.resolve()
 export async function savedLessons(){return (await records<SavedLesson>('lessons')).filter(l=>typeof l.id==='string'&&typeof l.title==='string'&&typeof l.updatedAt==='number'&&restoreAdaptiveWorkspace(l.raw)).sort((a,b)=>b.updatedAt-a.updatedAt)}
 export function saveLesson(workspace:AdaptiveWorkspace,document?:SavedLesson['document']):Promise<SavedLesson[]>{
  const operation=writes.catch(()=>{}).then(async()=>{
-  const id=await digest(JSON.stringify({source:workspace.source,course:workspace.course}))
+  const id=await digest(lessonIdentity(workspace))
   const record={id,title:workspace.course.title,name:workspace.name,updatedAt:Date.now(),raw:JSON.stringify(workspace),...(document?{document}:{})}
   return putBounded('lessons',record,12)
  })

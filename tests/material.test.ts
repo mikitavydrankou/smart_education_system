@@ -1,7 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizeSource, validateProfile, validateCourse, createLearning, reduceLearning, restoreWorkspace, learningResults } from '../lib/material.ts'
-import { sourceText, courseFixture } from './material-fixture.ts'
+import { normalizeSource, validateProfile, validateCourse, createLearning, reduceLearning, restoreWorkspace, learningResults, defaultProfile } from '../lib/material.ts'
+import { createAdaptiveLearning } from '../lib/adaptive.ts'
+import { lessonIdentity } from '../lib/device-storage.ts'
+import { sourceText, courseFixture, richCourseFixture } from './material-fixture.ts'
 import { importMaterial } from '../lib/import-material.ts'
 
 const profile = { goal: 'understand', level: 'beginner', minutes: 15, format: 'text' } as const
@@ -31,6 +33,15 @@ test('accepted courses must cite exact source text and contain valid distinct qu
     const value = structuredClone(courseFixture); mutate(value)
     assert.equal(validateCourse(value, source), null)
   }
+})
+
+test('lesson identity ignores media so enrich keeps the same library key', () => {
+  const source = normalizeSource(sourceText)!
+  const text = validateCourse(courseFixture, source, false)!
+  const rich = validateCourse(richCourseFixture, source, true)!
+  const learning = createAdaptiveLearning(text, defaultProfile)
+  const base = { version: 2 as const, source, name: 'Mój materiał', profile: defaultProfile, learning }
+  assert.equal(lessonIdentity({ ...base, course: text }), lessonIdentity({ ...base, course: rich }))
 })
 
 test('selected topics, bounded retries and answers restore by replay and yield factual results', () => {

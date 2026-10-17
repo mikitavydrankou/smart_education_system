@@ -4,6 +4,7 @@ import { defaultProfile } from '../../lib/material'
 
 test('own material becomes a selected course with adaptive retry, persistence and results', async ({ page }) => {
   await page.route('**/api/material', async route => {
+    if (route.request().url().includes('/api/material/media')) return route.fulfill({ json: { course: courseFixture } })
     const input = route.request().postDataJSON()
     expect(input.text).toContain('Fotosynteza')
     expect(input.profile.goal).toBe('exam')
@@ -79,7 +80,10 @@ test('DOCX and PDF extraction work locally and invalid documents produce Polish 
 })
 
 test('incorrect retry yields persistent review results without a third attempt', async ({ page }) => {
-  await page.route('**/api/material', route => route.fulfill({ json: { course: courseFixture } }))
+  await page.route('**/api/material', route => {
+    if (route.request().url().includes('/api/material/media')) return route.fulfill({ json: { course: courseFixture } })
+    return route.fulfill({ json: { course: courseFixture } })
+  })
   await page.goto('/workspace')
   await page.getByLabel('Materiał źródłowy', { exact: true }).fill(sourceText)
   await page.getByRole('button', { name: 'Praktyka', exact: true }).click()
@@ -105,7 +109,10 @@ test('incorrect retry yields persistent review results without a third attempt',
 
 test('denied storage warns without preventing an in-memory course', async ({ page }) => {
   await page.addInitScript(() => { Storage.prototype.setItem = () => { throw new DOMException('Denied', 'SecurityError') } })
-  await page.route('**/api/material', route => route.fulfill({ json: { course: courseFixture } }))
+  await page.route('**/api/material', route => {
+    if (route.request().url().includes('/api/material/media')) return route.fulfill({ json: { course: courseFixture } })
+    return route.fulfill({ json: { course: courseFixture } })
+  })
   await page.goto('/workspace')
   await page.getByLabel('Materiał źródłowy', { exact: true }).fill(sourceText)
   await expect(page.getByText(/Przeglądarka nie pozwala zapisać materiału/)).toBeVisible()

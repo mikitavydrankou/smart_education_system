@@ -4,7 +4,10 @@ import { richCourseFixture, courseFixture, sourceText } from '../material-fixtur
 import { createLearning, reduceLearning, normalizeSource, defaultProfile, validateCourse } from '../../lib/material'
 
 test('diagrams expose relationships and ordering survives refresh with honest feedback', async ({ page }) => {
-  await page.route('**/api/material', route => route.fulfill({ json: { course: richCourseFixture } }))
+  await page.route('**/api/material', route => {
+    if (route.request().url().includes('/api/material/media')) return route.fulfill({ json: { course: richCourseFixture } })
+    return route.fulfill({ json: { course: richCourseFixture } })
+  })
   await page.goto('/workspace')
   await page.getByLabel('Materiał źródłowy', { exact: true }).fill(sourceText)
   await page.getByRole('button', { name: 'Przygotuj moją lekcję' }).click()
@@ -59,7 +62,10 @@ test('real audio controls, playback evidence and unavailable-provider fallback',
       speak: (u: Utterance) => u.onstart?.(),
     } })
   })
-  await page.route('**/api/material', route => route.fulfill({ json: { course: richCourseFixture } }))
+  await page.route('**/api/material', route => {
+    if (route.request().url().includes('/api/material/media')) return route.fulfill({ json: { course: richCourseFixture } })
+    return route.fulfill({ json: { course: richCourseFixture } })
+  })
   await page.route('**/api/speech', route => route.fulfill({ contentType: 'audio/mpeg', body: readFileSync('tests/fixtures/narration.mp3') }))
   await page.goto('/workspace')
   await page.getByLabel('Materiał źródłowy', { exact: true }).fill(sourceText)
@@ -92,6 +98,33 @@ test('real audio controls, playback evidence and unavailable-provider fallback',
   await page.getByRole('button', { name: 'Sprawdź zrozumienie' }).click()
   await expect(page.getByRole('button', { name: 'Audio', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('button', { name: 'Zatrzymaj czytanie' })).toBeVisible()
+})
+
+test('text-only generation opens a lesson and enriches media on demand', async ({ page }) => {
+  let mediaCalls = 0
+  await page.route('**/api/material**', route => {
+    const url = route.request().url()
+    if (url.includes('/api/material/media')) {
+      mediaCalls++
+      return route.fulfill({ json: { course: richCourseFixture } })
+    }
+    if (url.match(/\/api\/material\/?(\?|$)/)) return route.fulfill({ json: { course: courseFixture } })
+    return route.fallback()
+  })
+  await page.goto('/workspace')
+  await page.getByLabel('Nie wiem, co pomaga — poznaj mój sposób nauki').uncheck()
+  await page.getByRole('button', { name: 'Tekst', exact: true }).click()
+  await page.getByLabel('Materiał źródłowy', { exact: true }).fill(sourceText)
+  await page.getByRole('button', { name: 'Przygotuj moją lekcję' }).click()
+  await expect(page.getByRole('heading', { name: 'Twoja mapa nauki' })).toBeVisible()
+  expect(mediaCalls).toBe(0)
+  await page.getByRole('button', { name: 'Zacznij naukę' }).click()
+  await expect(page.getByText(/Schemat i ćwiczenie korzystają na razie z cytatów/)).toBeVisible()
+  const mediaWait = page.waitForRequest(r => r.url().includes('/api/material/media'), { timeout: 10_000 })
+  await page.getByRole('button', { name: 'Schemat', exact: true }).click()
+  await mediaWait
+  expect(mediaCalls).toBe(1)
+  await expect(page.getByRole('button', { name: 'Element: Światło', exact: true })).toBeVisible()
 })
 
 test('automatic support responds to errors, can be disabled and preserves old progress', async ({ page }) => {
