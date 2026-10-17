@@ -1,0 +1,3 @@
+[build.environment]
+  # Model names are public defaults (also in .env.example / source), not secrets.
+  SECRETS_SCAN_OMIT_KEYS = "OPENROUTER_MODEL,OPENAI_MODEL,OPENROUTER_TTS_MODEL,OPENAI_TTS_MODEL"
