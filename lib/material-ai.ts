@@ -37,7 +37,11 @@ Dla order: targets=[], solution=wszystkie id items w poprawnej kolejności. Uży
       }),
     })
     if (response.status === 402) throw new GenerationError('Limit środków usługi AI nie wystarcza do przygotowania lekcji. Sprawdź saldo i limit klucza u dostawcy. Materiał został zachowany.', 402)
-    if (!response.ok) throw new GenerationError('Usługa AI jest chwilowo niedostępna. Spróbuj ponownie; materiał pozostaje zapisany.')
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      console.error('[material-ai] provider error', response.status, detail.slice(0, 500))
+      throw new GenerationError('Usługa AI jest chwilowo niedostępna. Spróbuj ponownie; materiał pozostaje zapisany.')
+    }
     const data = await response.json()
     if (data.status !== 'completed' || !Array.isArray(data.output)) throw new GenerationError('Nie udało się zakończyć generowania. Spróbuj skrócić materiał i ponowić próbę.')
     const result = data.output.flatMap((item: { type?: string; content?: { type?: string; text?: string }[] }) => item.type === 'message' && Array.isArray(item.content) ? item.content.filter(c => c.type === 'output_text' && typeof c.text === 'string').map(c => c.text) : []).join('')
