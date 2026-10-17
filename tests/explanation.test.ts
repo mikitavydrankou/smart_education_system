@@ -38,9 +38,11 @@ test('missing API key uses accurate fallback and is never labeled AI', async () 
 })
 
 test('OpenRouter key uses its Responses endpoint and namespaced model', async () => {
+  const oldKey = process.env.OPENAI_API_KEY
   const oldRouterKey = process.env.OPENROUTER_API_KEY
   const oldRouterModel = process.env.OPENROUTER_MODEL
   const originalFetch = globalThis.fetch
+  delete process.env.OPENAI_API_KEY
   process.env.OPENROUTER_API_KEY = 'test-router-placeholder'
   delete process.env.OPENROUTER_MODEL
   const mistake = resolveMistake({ questionId: 'p-dns', retry: false, selected: 0, style: 'simple' })!
@@ -62,6 +64,8 @@ test('OpenRouter key uses its Responses endpoint and namespaced model', async ()
     assert.deepEqual(await explainMistake(mistake), { text: mistake.fallback, source: 'fallback' })
   } finally {
     globalThis.fetch = originalFetch
+    if (oldKey === undefined) delete process.env.OPENAI_API_KEY
+    else process.env.OPENAI_API_KEY = oldKey
     if (oldRouterKey === undefined) delete process.env.OPENROUTER_API_KEY
     else process.env.OPENROUTER_API_KEY = oldRouterKey
     if (oldRouterModel === undefined) delete process.env.OPENROUTER_MODEL

@@ -2,6 +2,7 @@ import { sourceCitations, resolveCitations } from './source-citations.ts'
 import { validateCourse, type Source, type Profile, type Course } from './material.ts'
 import { generationSchema } from './course-schema.ts'
 import { courseQualityIssues } from './course-quality.ts'
+import { resolveAiProvider } from './ai-provider.ts'
 
 export const courseSchema = generationSchema()
 export class GenerationError extends Error {
@@ -9,9 +10,9 @@ export class GenerationError extends Error {
   constructor(message: string, status = 502) { super(message); this.status = status }
 }
 export async function generateMaterial(source: Source, profile: Profile, signal?: AbortSignal): Promise<Course> {
-  const router = !!process.env.OPENROUTER_API_KEY
-  const key = router ? process.env.OPENROUTER_API_KEY : process.env.OPENAI_API_KEY
-  if (!key) throw new GenerationError('Skonfiguruj klucz AI na serwerze, aby tworzyć lekcje z własnych materiałów. Twój tekst został zachowany.', 503)
+  const provider = resolveAiProvider()
+  if (!provider) throw new GenerationError('Skonfiguruj klucz AI na serwerze, aby tworzyć lekcje z własnych materiałów. Twój tekst został zachowany.', 503)
+  const { router, key } = provider
   let repair: { previousCourse: unknown; issues: string[] } | undefined
   try {
     for (let attempt = 0; attempt < 2; attempt++) {

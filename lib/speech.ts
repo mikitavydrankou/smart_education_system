@@ -1,7 +1,10 @@
+import { resolveAiProvider } from './ai-provider.ts'
+
 export async function synthesizeSpeech(text: string, signal?: AbortSignal): Promise<Uint8Array> {
   if (typeof text !== 'string' || text.trim().length < 20 || text.length > 2600) throw new Error('Tekst nagrania musi zawierać od 20 do 2600 znaków.')
-  const router = !!process.env.OPENROUTER_API_KEY, key = router ? process.env.OPENROUTER_API_KEY : process.env.OPENAI_API_KEY
-  if (!key) throw new Error('Nagrania AI są niedostępne. Możesz skorzystać z odczytu systemowego lub transkrypcji.')
+  const provider = resolveAiProvider()
+  if (!provider) throw new Error('Nagrania AI są niedostępne. Możesz skorzystać z odczytu systemowego lub transkrypcji.')
+  const { router, key } = provider
   const model = router ? process.env.OPENROUTER_TTS_MODEL || 'microsoft/mai-voice-2.1-flash' : process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts'
   const voice = process.env.TTS_VOICE || (model === 'microsoft/mai-voice-2.1-flash' ? 'pl-PL-Harper:MAI-Voice-2.1-Flash' : 'alloy')
   try {

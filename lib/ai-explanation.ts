@@ -1,11 +1,12 @@
 import { resolveMistake } from './explanation.ts'
+import { resolveAiProvider } from './ai-provider.ts'
 
 type Mistake = NonNullable<ReturnType<typeof resolveMistake>>
 export async function explainMistake(mistake: Mistake): Promise<{ text: string; source: 'ai' | 'fallback' }> {
   const fallback = { text: mistake.fallback, source: 'fallback' as const }
-  const router = !!process.env.OPENROUTER_API_KEY
-  const apiKey = router ? process.env.OPENROUTER_API_KEY : process.env.OPENAI_API_KEY
-  if (!apiKey) return fallback
+  const provider = resolveAiProvider()
+  if (!provider) return fallback
+  const { router, key: apiKey } = provider
   try {
     const { fallback: verifiedAlternative, ...context } = mistake
     const response = await fetch(router ? 'https://openrouter.ai/api/v1/responses' : 'https://api.openai.com/v1/responses', {

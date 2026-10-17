@@ -17,7 +17,7 @@ pnpm dev
 
 Open http://localhost:3000. The example lesson at `/lesson` works without an API key. Creating courses from your material at `/workspace` requires `OPENAI_API_KEY` or `OPENROUTER_API_KEY` in `.env.local`. `OPENAI_MODEL` defaults to `gpt-4.1-mini`. Credentials stay server-side. Never commit secrets. Copy `.env.example` only on first setup; do not overwrite existing credentials.
 
-Alternatively set `OPENROUTER_API_KEY` and optionally `OPENROUTER_MODEL` (default `openai/gpt-4.1-mini`). OpenRouter takes precedence when both provider keys are configured and uses its compatible [Responses API](https://openrouter.ai/docs/api_reference/responses/overview). The example lesson has verified fallback explanations. User-material generation instead reports provider errors and preserves the draft; it never substitutes a fictional generic course.
+Alternatively set `OPENROUTER_API_KEY` and optionally `OPENROUTER_MODEL` (default `openai/gpt-4.1-mini`). `OPENAI_API_KEY` takes precedence when both provider keys are configured; OpenRouter uses its compatible [Responses API](https://openrouter.ai/docs/api_reference/responses/overview). The example lesson has verified fallback explanations. User-material generation instead reports provider errors and preserves the draft; it never substitutes a fictional generic course.
 
 ## Own-material workflow
 
