@@ -7,7 +7,8 @@ import { ArrowRight, BookOpen, Check, ChevronRight, RotateCcw, Sparkles, Layers,
 import { concepts, knowledgeQuestions, practiceQuestions, type ConceptId, type QuestionContent } from '@/lib/lesson-data'
 import { getResults, getWeakConcepts, type Session, type Action } from '@/lib/session'
 import { useSession } from './use-session'
-import { NetworkDiagram, SpeechControl } from './lesson-media'
+import { NetworkDiagram } from './lesson-media'
+import { AudioPreview } from './audio-preview'
 import { MistakeExplanation } from './mistake-explanation'
 import { LearningPreview } from './learning-preview'
 
@@ -86,7 +87,7 @@ function ContentLesson({ session, update }: { session: Session; update: Update }
   const text = mode === 'main' ? (needsHelp ? `${concept.explanation} ${concept.example}` : concept.simple) : concept[mode]
   return <><Pill>Krok 2 z 4 · lekcja dopasowana do wiedzy</Pill><h1 className="mt-5 text-3xl font-semibold sm:text-4xl">Jak działa internet?</h1><p className="mt-3 text-slate-600">{weak.length ? 'Tematy wymagające wyjaśnienia otrzymują szerszy opis i przykład. Pozostałe możesz przejrzeć w skrócie.' : 'Znasz już podstawowe pojęcia. Zacznij od krótkich objaśnień lub przejdź do praktyki.'}</p><Progress current={2} total={4} />
     <div className="concept-control" aria-label="Tematy lekcji">{concepts.map(c => <button key={c.id} type="button" aria-pressed={c.id === concept.id} onClick={() => { update({ type: 'visit', concept: c.id }); setMode('main') }} className={`min-h-11 rounded-full px-4 py-2 text-sm font-semibold ${c.id === concept.id ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}>{c.shortTitle}{weak.includes(c.id) ? ' · wyjaśnienie' : ' · skrót'}{session.completed.includes(c.id) ? ' ✓' : ''}</button>)}</div>
-    <section className={cardClass}><h2 className="text-2xl font-semibold">{concept.title}</h2><p className="mt-4 text-lg leading-8 text-slate-700">{text}</p><div className="explanation-control">{([['main', 'Opis'], ['simple', 'Wyjaśnij prościej'], ['example', 'Pokaż przykład'], ['steps', 'Krok po kroku']] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={mode === value} onClick={() => setMode(value)} className={`min-h-11 rounded-xl border px-4 py-3 text-sm font-semibold ${mode === value ? 'border-blue-400 bg-blue-50 text-blue-900' : 'border-slate-200 bg-white text-slate-700'}`}>{label}</button>)}</div><SpeechControl text={text} /><NetworkDiagram /></section>
+    <section className={cardClass}><h2 className="text-2xl font-semibold">{concept.title}</h2><p className="mt-4 text-lg leading-8 text-slate-700">{text}</p><div className="explanation-control">{([['main', 'Opis'], ['simple', 'Wyjaśnij prościej'], ['example', 'Pokaż przykład'], ['steps', 'Krok po kroku']] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={mode === value} onClick={() => setMode(value)} className={`min-h-11 rounded-xl border px-4 py-3 text-sm font-semibold ${mode === value ? 'border-blue-400 bg-blue-50 text-blue-900' : 'border-slate-200 bg-white text-slate-700'}`}>{label}</button>)}</div><AudioPreview /><NetworkDiagram /></section>
     <div className="mt-6 flex justify-end"><Button onClick={() => update({ type: 'practice' })}>Przejdź do ćwiczeń <ArrowRight aria-hidden /></Button></div></>
 }
 function Practice({ session, update }: { session: Session; update: Update }) {

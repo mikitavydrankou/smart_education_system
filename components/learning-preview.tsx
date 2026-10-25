@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { ArrowUpRight, BookOpen, Headphones, Network, Check } from 'lucide-react'
-import { NetworkDiagram, SpeechControl } from './lesson-media'
+import { NetworkDiagram } from './lesson-media'
+import { AudioPreview } from './audio-preview'
 import { concepts } from '@/lib/lesson-data'
 
 const formats = [
@@ -28,7 +29,7 @@ export function LearningPreview() {
         <div className="preview-panel" aria-live="polite">
           {format === 'text' && <><span className="preview-topic-number">01 / DNS</span><h3>Od nazwy<br />do adresu.</h3><p>{concepts[0].simple}</p><div className="definition-row"><span>Nazwa domeny</span><span aria-hidden="true">→</span><span>Adres IP</span></div><p className="preview-footnote">Najpierw zrozum ideę. Potem przejdź do szczegółów.</p></>}
           {format === 'diagram' && <><span className="preview-topic-number">01 / POŁĄCZ FAKTY</span><h3>Zobacz, jak<br />to się łączy.</h3><NetworkDiagram /></>}
-          {format === 'audio' && <><span className="preview-topic-number">01 / POSŁUCHAJ</span><h3>Ta sama wiedza.<br />W Twoim tempie.</h3><div className="audio-wave" aria-hidden="true">{Array.from({ length: 31 }, (_, i) => <span key={i} style={{ height: `${12 + ((i * 17 + 9) % 42)}px` }} />)}</div><SpeechControl text={concepts[0].simple} /><details className="audio-transcript"><summary>Tekst wyjaśnienia</summary><p>{concepts[0].simple}</p></details></>}
+          {format === 'audio' && <><span className="preview-topic-number">01 / POSŁUCHAJ</span><h3>Ta sama wiedza.<br />W Twoim tempie.</h3><AudioPreview /><details className="audio-transcript"><summary>Tekst wyjaśnienia</summary><p>{concepts[0].simple}</p></details></>}
         </div>
       </div>
     </div>

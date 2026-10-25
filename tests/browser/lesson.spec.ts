@@ -14,7 +14,7 @@ test('complete adaptive journey, retry restoration, fallback and restart', async
   page.on('pageerror', error => errors.push(error.message))
   await page.goto('/')
   await expect(page.locator('html')).toHaveAttribute('lang', 'pl')
-  await page.getByRole('link', { name: /Rozpocznij lub wznów/ }).click()
+  await page.getByRole('link', { name: 'Przykładowa lekcja', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Co już wiesz?' })).toBeVisible()
   await assess(page, true)
   await expect(page.getByText(/Tematy wymagające wyjaśnienia/)).toBeVisible()

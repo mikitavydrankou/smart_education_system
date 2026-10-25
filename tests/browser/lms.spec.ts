@@ -1,0 +1,61 @@
+import { test, expect, type Page } from '@playwright/test'
+import { createLmsFixture } from '../lms-fixture'
+import { readMaterial } from './lms-helpers'
+
+test.describe('local Supabase learning journey', () => {
+  test.skip(process.env.LMS_E2E !== '1', 'Requires an isolated local Supabase instance.')
+  test('assessment, enrollment approval, adaptation and sequential lessons', async ({ page, browser }) => {
+    test.setTimeout(90_000)
+    const fixture = await createLmsFixture()
+    const teacherContext = await browser.newContext()
+    try {
+      const login = async (target: Page, email: string) => {
+        await target.goto('/login')
+        await target.getByLabel('Email', { exact: true }).fill(email)
+        await target.getByLabel('Hasło', { exact: true }).fill(fixture.password)
+        await target.getByRole('button', { name: 'Zaloguj się', exact: true }).click()
+      }
+      await login(page, fixture.studentEmail)
+      await expect(page).toHaveURL(/\/assessment$/)
+      await page.getByRole('radio', { name: 'TEST ONLY: obrazy', exact: true }).check()
+      await page.getByRole('button', { name: 'Zakończ ankietę' }).click()
+      await expect(page.getByRole('heading', { name: 'Wybrany format: Wzrokowiec' })).toBeVisible()
+      await page.goto(`/courses/${fixture.courseId}`)
+      await page.getByRole('button', { name: 'Zapisz się', exact: true }).click()
+      await expect(page.getByText('Twoje zgłoszenie czeka na zatwierdzenie przez prowadzącego.')).toBeVisible()
+      await expect(page.getByRole('link', { name: /Otwórz lekcję/ })).toHaveCount(0)
+      const teacher = await teacherContext.newPage()
+      await login(teacher, fixture.teacherEmail)
+      await expect(teacher).toHaveURL(/\/$/)
+      await teacher.goto(`/courses/${fixture.courseId}`)
+      await teacher.getByRole('button', { name: 'Zatwierdź', exact: true }).click()
+      await expect(teacher.getByText('Zatwierdzony', { exact: true })).toBeVisible()
+      await page.reload()
+      await expect(page.getByText('Najpierw zalicz poprzednie lekcje')).toBeVisible()
+      await page.getByRole('link', { name: /Otwórz lekcję/ }).click()
+      await expect(page.getByText('Materiał wizualny testowy')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Przejdź do testu' })).toBeDisabled()
+      await readMaterial(page)
+      await page.getByRole('button', { name: 'Przejdź do testu' }).click()
+      await page.getByRole('radio', { name: 'Pięć', exact: true }).check()
+      await page.getByRole('button', { name: 'Zakończ test' }).click()
+      await expect(page.getByRole('heading', { name: 'Spróbuj ponownie' })).toBeVisible()
+      await page.getByRole('button', { name: 'Wróć do lekcji / zmień format' }).click()
+      await page.getByRole('button', { name: 'Kinestetyk', exact: true }).click()
+      await expect(page.getByText('Materiał praktyczny testowy')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Przejdź do testu' })).toBeDisabled()
+      await readMaterial(page)
+      await page.getByRole('button', { name: 'Przejdź do testu' }).click()
+      await page.getByRole('radio', { name: 'Cztery', exact: true }).check()
+      await page.getByRole('button', { name: 'Zakończ test' }).click()
+      await expect(page.getByRole('heading', { name: 'Test zaliczony!' })).toBeVisible()
+      await page.goto(`/courses/${fixture.courseId}`)
+      await expect(page.getByRole('link', { name: /Otwórz lekcję/ })).toHaveCount(2)
+      await page.getByRole('link', { name: /Otwórz lekcję/ }).nth(1).click()
+      await expect(page.getByRole('heading', { name: 'Lekcja testowa 2', exact: true })).toBeVisible()
+    } finally {
+      await teacherContext.close()
+      await fixture.cleanup()
+    }
+  })
+})

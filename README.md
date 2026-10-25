@@ -1,5 +1,17 @@
 # ADAPT
 
+## Learning platform (Netlify + Supabase)
+
+The home page is now the subject catalog. The Polish LMS supports email accounts, teacher-owned subjects, enrollment approval, grouped lesson variants, six question types, server-side grading and sequential progression. Existing `/lesson` and `/workspace` demonstrations remain independent.
+
+Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `NEXT_PUBLIC_SITE_URL` using `.env.example`; preserve any existing local environment values. Apply the additive migration and expose the `lms` schema following [LMS setup](docs/LMS-SETUP.md). Never run a database reset against a hosted project. No AI provider key is needed for the platform.
+
+The complete 20-question Polish EducationPlanner questionnaire is translated from HTML fragments supplied by the user. Migration `202610250003_educationplanner_assessment.sql` activates it, including server-side scoring and tie resolution. Existing completed results are preserved. This classroom demonstration lets users choose Student or Nauczyciel during registration (migration 004). The `/people` directory shows every teacher to students and every student to teachers, independently of enrollment.
+
+Local database checks: `pnpm exec supabase start`, then `pnpm exec supabase test db`. Browser LMS tests require an isolated local Supabase, `LMS_E2E=1` and a production build using that local instance; see the setup guide. Fixture tests refuse hosted databases and restore questionnaire configuration afterward.
+
+The deployment requires real callback URL/SMTP configuration and a Netlify build. Source changes do not automatically migrate or publish a hosted installation.
+
 An adaptive learning workspace for the university course **Systemy Multimedialne Uczące**. Add your own source material, choose learning preferences, inspect generated topics and study through text, visual steps, audio and practice with bounded retry. A separate deterministic DNS/IP example remains available.
 
 The Polish interface uses an Apple-inspired system-font design with responsive layouts and automatic light/dark appearance. `/workspace` accepts pasted text, TXT/Markdown, DOCX (Mammoth) and text-based PDF (PDF.js). Generation uses the configured OpenRouter/OpenAI key, validates exact source quotations and saves course/progress locally. See [reuse research and next architecture](docs/ADAPT-NEXT.md) and [third-party notices](docs/THIRD-PARTY-NOTICES.md).
@@ -30,6 +42,10 @@ Alternatively set `OPENROUTER_API_KEY` and optionally `OPENROUTER_MODEL` (defaul
 Limits: 120–250,000 text characters, 10 MB per file, at most 150 PDF pages. Long documents are retained locally and divided into selectable parts, usually up to 12,000 characters (a small tail may merge into the preceding part, within the 20,000-character lesson bound). Each lesson covers its selected part; the results offer continuation to the next part. Scanned PDFs need external OCR. Complex PDF reading order/tables can require manual cleanup; extraction does not preserve original page coordinates. Course generation is two-phase and cost-aware: `/api/material` returns a text-only lesson (3 concepts, ~2500 output tokens, one attempt). Diagrams, narration and activities are requested from `/api/material/media` only when the learner opens Schemat, Audio or Praktyka (~4000 tokens, one attempt). Until then the UI uses free citation-based fallbacks. On Netlify each phase must finish within the platform function time limit (~30s). Audio uses server-generated MP3 with transcript/system-voice fallback. Provider credit errors are distinguished from content-validation failures.
 
 ## Verify
+
+For the Supabase classroom platform, the teacher dashboard includes a ready Internet demonstration course. The lesson editor groups visual/auditory/kinesthetic formats into one, two or three versions. Students progress through material and interactive practice before quizzes; changing formats restarts the material. See [LMS setup](docs/LMS-SETUP.md) for migrations and local database/browser checks.
+
+The platform uses a Moodle-inspired portal layout with role-aware sidebar navigation, course sections, lesson index and progress panels. Mobile navigation expands with the Menu button. LMS narration and the `/lesson` example show a clearly marked, non-playing DEMO audio player; uploaded teacher audio and the separate `/workspace` tools are unaffected.
 
 ```sh
 pnpm test

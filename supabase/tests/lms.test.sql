@@ -1,0 +1,71 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(32);
+create function pg_temp.ready_attempt(lesson uuid,preview boolean default false) returns uuid language plpgsql as $$
+declare payload jsonb; variant jsonb; block jsonb; study uuid;
+begin
+ payload := lms.get_lesson(lesson,preview);
+ variant := payload->'content'->0;
+ study := (lms.create_study_session(lesson,variant->>'id',preview)->>'id')::uuid;
+ for block in select value from jsonb_array_elements(variant->'blocks') loop
+   perform lms.record_study_block(study,block->>'id',block->'activity'->'answer');
+ end loop;
+ return lms.start_attempt(lesson,preview,study);
+end $$;
+select ok(lms.valid_question('{"id":"q","prompt":"Choose","type":"single","options":["a","b"],"answer":0}'),'single choice accepts valid index');
+select ok(not lms.valid_question('{"id":"q","prompt":"Choose","type":"single","options":["a","b"],"answer":2}'),'single choice rejects out of bounds');
+select ok(lms.valid_question('{"id":"q","prompt":"Choose","type":"multiple","options":["a","b"],"answer":[0,1]}'),'multiple choice validates');
+select ok(not lms.valid_question('{"id":"q","prompt":"Choose","type":"multiple","options":["a","b"],"answer":[0,0]}'),'duplicate multiple choice keys rejected');
+select ok(lms.valid_question('{"id":"q","prompt":"Type","type":"short","answer":["A"]}'),'short answer accepts alternatives');
+select ok(lms.valid_question('{"id":"q","prompt":"Match","type":"matching","options":["a|b","c|d"],"answer":{"a":"b","c":"d"}}'),'matching validates');
+select ok(lms.valid_question('{"id":"q","prompt":"Order","type":"ordering","options":["a","b"],"answer":["b","a"]}'),'ordering validates permutation');
+select is(lms.normalize_answer('  Ala   MA kota '),'ala ma kota','short answer whitespace and case normalized');
+select is(lms.public_question('{"id":"q","type":"matching","options":["A|B","C|D"],"answer":{"A":"B","C":"D"}}')->'options','["A","C"]'::jsonb,'matching public options exclude paired answers');
+select is(lms.public_question('{"id":"q","type":"matching","options":["A|D","C|B"],"answer":{"A":"D","C":"B"}}')->'rightOptions','["B","D"]'::jsonb,'matching right choices sorted independently');
+insert into auth.users(id,email) values
+ ('10000000-0000-0000-0000-000000000001','teacher@example.test'),
+ ('10000000-0000-0000-0000-000000000002','student@example.test'),
+ ('10000000-0000-0000-0000-000000000003','other@example.test');
+update lms.profiles set role='teacher' where id in ('10000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000003');
+update lms.profiles set assessment_completed=true where id='10000000-0000-0000-0000-000000000002';
+select is((select role from lms.profiles where id='10000000-0000-0000-0000-000000000002'),'student','new accounts default to student');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000001',true);
+select lms.save_course('{"id":"20000000-0000-0000-0000-000000000001","title":"Test","published":true}');
+select lms.save_lesson('{"id":"30000000-0000-0000-0000-000000000001","course_id":"20000000-0000-0000-0000-000000000001","title":"First","position":1,"published":true,"content":[{"id":"v","styles":["visual"],"blocks":[{"id":"b","type":"text","text":"Hello"}]}],"questions":[{"id":"q","type":"boolean","prompt":"True?","options":["Prawda","Fałsz"],"answer":true}]}');
+select lms.save_lesson('{"id":"30000000-0000-0000-0000-000000000002","course_id":"20000000-0000-0000-0000-000000000001","title":"Second","position":2,"published":true,"content":[{"id":"v","styles":["visual"],"blocks":[{"id":"b","type":"text","text":"Hello"}]}],"questions":[{"id":"q","type":"boolean","prompt":"True?","options":["Prawda","Fałsz"],"answer":true}]}');
+select ok(not (lms.get_lesson('30000000-0000-0000-0000-000000000001',true)->'questions'->0 ? 'answer'),'teacher preview hides keys');
+select throws_ok($$select lms.get_lesson('30000000-0000-0000-0000-000000000002',true)$$,'42501','Lesson unavailable','teacher preview follows sequential locks');
+select is((lms.submit_attempt(pg_temp.ready_attempt('30000000-0000-0000-0000-000000000001',true),'{"q":true}')->>'passed')::boolean,true,'teacher can pass isolated preview test');
+select lives_ok($$select lms.get_lesson('30000000-0000-0000-0000-000000000002',true)$$,'passing preview opens next preview lesson');
+select is((select count(*)::integer from lms.lesson_progress),0,'preview does not create student progress');
+select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select lms.save_course('{"id":"20000000-0000-0000-0000-000000000001","title":"Hijack"}')$$,'42501','Access denied','unrelated teacher cannot edit');
+select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000002',true);
+select throws_ok($$update lms.profiles set role='teacher'$$,'42501',null,'student cannot elevate role');
+select throws_ok($$select * from lms.revisions$$,'42501',null,'answer keys are not readable');
+select lms.request_enrollment('20000000-0000-0000-0000-000000000001');
+select lms.request_enrollment('20000000-0000-0000-0000-000000000001');
+select is((select count(*)::integer from lms.enrollments),1,'duplicate enrollment is idempotent');
+select throws_ok($$select lms.get_lesson('30000000-0000-0000-0000-000000000001')$$,'42501','Lesson unavailable','pending enrollment blocked');
+select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000001',true);
+select lms.review_enrollment('20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002',true);
+select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000002',true);
+select ok(not (lms.get_lesson('30000000-0000-0000-0000-000000000001')->'questions'->0 ? 'answer'),'student question excludes answer');
+select throws_ok($$select lms.get_lesson('30000000-0000-0000-0000-000000000002')$$,'42501','Lesson unavailable','next lesson locked');
+select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000001',true);
+select lms.save_lesson('{"id":"30000000-0000-0000-0000-000000000001","course_id":"20000000-0000-0000-0000-000000000001","title":"Incomplete draft","position":3,"published":false,"content":[],"questions":[]}');
+select is(lms.get_lesson('30000000-0000-0000-0000-000000000001')->>'title','Incomplete draft','teacher can reopen incomplete draft');
+select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000002',true);
+select is(lms.get_lesson('30000000-0000-0000-0000-000000000001')->>'title','First','draft preserves published revision and title');
+select throws_ok($$select lms.get_lesson('30000000-0000-0000-0000-000000000002')$$,'42501','Lesson unavailable','draft cannot bypass progression');
+select set_config('lms.test_attempt',pg_temp.ready_attempt('30000000-0000-0000-0000-000000000001')::text,true);
+select is((lms.submit_attempt(current_setting('lms.test_attempt')::uuid,'{"q":false}')->>'passed')::boolean,false,'wrong answer fails');
+select throws_ok($$select lms.get_lesson('30000000-0000-0000-0000-000000000002')$$,'42501','Lesson unavailable','failure keeps lock');
+select is((lms.submit_attempt(current_setting('lms.test_attempt')::uuid,'{"q":true}')->>'passed')::boolean,false,'resubmission keeps original result');
+select is((lms.submit_attempt(pg_temp.ready_attempt('30000000-0000-0000-0000-000000000001'),'{"q":true}')->>'passed')::boolean,true,'correct answer passes');
+select lives_ok($$select lms.get_lesson('30000000-0000-0000-0000-000000000002')$$,'passing opens next lesson');
+set local role anon;
+select throws_ok($$select * from lms.revisions$$,'42501',null,'guest cannot read content');
+select * from finish();
+rollback;

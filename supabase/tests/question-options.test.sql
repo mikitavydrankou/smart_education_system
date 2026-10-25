@@ -1,0 +1,13 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(8);
+select ok(not lms.valid_question('{"id":"q","prompt":"Q","type":"boolean","answer":true}'),'boolean requires renderable options');
+select ok(not lms.valid_question('{"id":"q","prompt":"Q","type":"boolean","options":["T","F","Maybe"],"answer":true}'),'boolean requires exactly two options');
+select ok(not lms.valid_question('{"id":"q","prompt":"Q","type":"single","options":["","B"],"answer":0}'),'blank options rejected');
+select ok(not lms.valid_question('{"id":"q","prompt":"Q","type":"single","options":["A","A"],"answer":0}'),'duplicate options rejected');
+select ok(not lms.valid_question('{"id":"q","prompt":"Q","type":"multiple","options":["A",null],"answer":[0]}'),'null option rejected');
+select ok(not lms.valid_question('{"id":"q","prompt":"Q","type":"ordering","options":[1,2],"answer":[1,2]}'),'nonstring ordering options rejected');
+select ok(lms.valid_question('{"id":"q","prompt":"Q","type":"boolean","options":["Prawda","Fałsz"],"answer":true}'),'valid boolean labels accepted');
+select ok(lms.valid_question('{"id":"q","prompt":"Q","type":"short","answer":["A"]}'),'short answer does not require options');
+select * from finish();
+rollback;

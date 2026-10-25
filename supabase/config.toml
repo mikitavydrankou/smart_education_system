@@ -1,0 +1,10 @@
+project_id = "adapt-lms"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public", "lms"]
+extra_search_path = ["public", "extensions"]
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback", "http://localhost:3000/reset-password?update=1", "http://127.0.0.1:3100/**"]

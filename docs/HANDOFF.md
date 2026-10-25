@@ -1,5 +1,7 @@
 # ADAPT maintenance handoff
 
+The October 25 LMS addition supersedes the account/database limitation below: see [LMS implementation record](LMS-IMPLEMENTATION.md) and [deployment setup](LMS-SETUP.md). The original local learning examples remain available separately.
+
 ## Product requirements
 
 University prototype for the course “Systemy Multimedialne Uczące”. Complete the existing application rather than rebuilding it. All user-facing text must be natural Polish; code and developer documentation remain English. The initial mint/teal design constraint was superseded by the user's 2026-10-17 request for an Apple-inspired redesign. The subsequent “design and implement” request authorized the source-to-course workflow, now available at `/workspace`. The DNS/IP course remains an independent example at `/lesson`. No accounts or cloud database have been added.
